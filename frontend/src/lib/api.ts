@@ -1,5 +1,5 @@
-const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const API_BASE = rawApiBase.replace(/\/+$/, ""); // Strip trailing slashes safely
+// Vercel proxy rewrite handles the routing now to avoid CORS/Mixed Content.
+const API_BASE = "";
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
