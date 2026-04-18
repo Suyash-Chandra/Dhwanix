@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Git Music - AI Musical Idea Version Control",
+    title="Dhwanix API - AI Musical Idea Version Control",
     version="1.0.0",
     lifespan=lifespan,
 )

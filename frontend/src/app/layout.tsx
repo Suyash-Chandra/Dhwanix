@@ -3,7 +3,7 @@ import "./globals.css";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "Git Music | Version control for musical ideas",
+  title: "Dhwanix | Version control for musical ideas",
   description:
     "Capture, analyze, and evolve musical ideas with a studio-focused interface.",
 };

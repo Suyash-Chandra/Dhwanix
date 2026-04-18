@@ -72,7 +72,7 @@ export default function Dashboard() {
               Save the riff before the room forgets it.
             </h1>
             <p className="lede mt-5">
-              Git Music turns scattered melodies, loops, and fragments into a catalog
+              Dhwanix turns scattered melodies, loops, and fragments into a catalog
               you can revisit, search, and evolve like drafts in a recording notebook.
             </p>
 

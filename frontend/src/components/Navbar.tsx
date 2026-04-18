@@ -19,12 +19,12 @@ export default function Navbar() {
     <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 rounded-[1.75rem] border border-[rgba(68,54,40,0.1)] bg-[rgba(255,250,240,0.8)] px-4 py-3 shadow-[0_18px_40px_rgba(55,33,11,0.08)] backdrop-blur-xl">
         <Link href="/" className="flex shrink-0 items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[linear-gradient(135deg,#CFECF3,#CFECF3)] text-sm font-bold tracking-[0.24em] text-[var(--text)]">
-            GM
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[linear-gradient(135deg,#CFECF3,#CFECF3)] text-xl font-bold text-[var(--text)]">
+            🎵
           </div>
           <div>
             <p className="font-[family-name:var(--font-display)] text-2xl leading-none tracking-[-0.04em]">
-              Git Music
+              Dhwanix
             </p>
             <p className="mt-1 text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-[var(--soft)]">
               idea archive
