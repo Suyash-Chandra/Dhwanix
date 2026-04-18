@@ -12,48 +12,14 @@ KEY_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 def detect_key(y: np.ndarray, sr: int) -> str:
     """
-    Detect musical key using Krumhansl-Schmuckler with enhanced chroma.
-
-    Pipeline:
-      1. HPSS to isolate harmonic content (removes drums/noise).
-      2. CQT chroma with 7 octaves from C1 for full tonal coverage.
-      3. Non-local-means filtering (nn_filter) for temporal smoothing.
-      4. Simple mean aggregation — reliable for short clips.
-      5. Correlate against all 24 major/minor key profiles.
-      6. Lenient threshold to avoid over-rejecting valid detections.
+    Memory-lite key detection to prevent OOM on small servers.
+    Uses basic STFT chroma instead of HPSS + CQT.
     """
     try:
-        # 1. Separate harmonic content
-        y_harmonic, _ = librosa.effects.hpss(y)
-        # Use harmonic if it has signal, else fall back to raw
-        if np.max(np.abs(y_harmonic)) > 1e-6:
-            source = y_harmonic
-        else:
-            source = y
-
-        # 2. CQT chroma — 7 octaves from C1 gives us the full pitch range
-        #    bins_per_octave=36 for 3x oversampling = sharper pitch resolution
-        chroma = librosa.feature.chroma_cqt(
-            y=source,
-            sr=sr,
-            n_chroma=12,
-            n_octaves=7,
-            bins_per_octave=36,
-            fmin=librosa.note_to_hz('C1'),
-        )
-
-        # 3. Non-local-means smoothing (built into librosa, more robust than median)
-        try:
-            chroma = librosa.decompose.nn_filter(
-                chroma,
-                aggregate=np.median,
-                metric='cosine',
-                width=int(sr / 512),  # about 1 second of context
-            )
-        except Exception:
-            pass  # gracefully skip if nn_filter fails on very short clips
-
-        # 4. Aggregate: simple mean across time
+        # Use simple STFT chroma (much less memory than CQT + HPSS)
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+        
+        # Aggregate: simple mean across time
         chroma_mean = np.mean(chroma, axis=1)
 
         # Normalize the chroma vector
@@ -62,7 +28,7 @@ def detect_key(y: np.ndarray, sr: int) -> str:
             return "Unknown"
         chroma_mean = chroma_mean / chroma_norm
 
-        # 5. Correlate with all 24 key profiles
+        # Correlate with all 24 key profiles
         major_corrs: list[float] = []
         minor_corrs: list[float] = []
         for i in range(12):
@@ -78,9 +44,6 @@ def detect_key(y: np.ndarray, sr: int) -> str:
 
         best_score = max(major_score, minor_score)
 
-        # 6. Lenient threshold — only reject truly featureless audio
-        #    0.10 is low enough to accept most tonal content but rejects
-        #    pure noise/silence
         if best_score < 0.10:
             return "Unknown"
 
@@ -94,43 +57,24 @@ def detect_key(y: np.ndarray, sr: int) -> str:
 
 def detect_bpm(y: np.ndarray, sr: int) -> float | None:
     """
-    Robust BPM detection using librosa's dynamic-programming beat tracker.
-
-    Pipeline:
-      1. HPSS to isolate percussive content (beats come from percussion).
-      2. Compute onset_strength from percussive signal.
-      3. Use beat_track with the onset envelope — this uses dynamic
-         programming to find globally consistent beats, much more reliable
-         than raw tempogram for short clips.
-      4. Calculate BPM from inter-beat intervals (IBIs) for ground-truth
-         accuracy — this counts ACTUAL detected beat positions rather than
-         relying on the tempo estimator's prior.
-      5. Octave-error correction to stay within 60-200 BPM.
+    Memory-lite BPM detection using librosa's default beat tracker.
+    Avoids HPSS to save memory.
     """
     try:
-        # 1. Isolate percussive signal
-        _, y_percussive = librosa.effects.hpss(y)
+        # Build onset strength envelope directly from the original signal
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
 
-        # 2. Build onset strength envelope from percussive content
-        onset_env = librosa.onset.onset_strength(
-            y=y_percussive,
-            sr=sr,
-            n_mels=128,
-        )
-
-        # 3. Dynamic-programming beat tracker
+        # Dynamic-programming beat tracker
         tempo_estimate, beat_frames = librosa.beat.beat_track(
             onset_envelope=onset_env,
             sr=sr,
-            tightness=100,   # moderate tightness for flexibility
+            tightness=100,
         )
 
-        # 4. If we got enough beats, compute BPM from actual inter-beat intervals
-        #    This is more accurate than the tempo_estimate for short clips
+        # Compute BPM from actual inter-beat intervals for accuracy
         if beat_frames is not None and len(beat_frames) >= 4:
             beat_times = librosa.frames_to_time(beat_frames, sr=sr)
             intervals = np.diff(beat_times)
-            # Remove outlier intervals (keep between 10th and 90th percentile)
             if len(intervals) >= 4:
                 p10, p90 = np.percentile(intervals, [10, 90])
                 intervals = intervals[(intervals >= p10) & (intervals <= p90)]
@@ -140,16 +84,14 @@ def detect_bpm(y: np.ndarray, sr: int) -> float | None:
             else:
                 bpm = float(np.atleast_1d(tempo_estimate)[0])
         else:
-            # Fallback to librosa's tempo estimate
             bpm = float(np.atleast_1d(tempo_estimate)[0])
 
-        # 5. Octave-error correction: keep BPM in the musical comfort zone
+        # Octave-error correction
         while bpm > 200:
             bpm /= 2
         while bpm < 60:
             bpm *= 2
 
-        # Final sanity clamp
         bpm = max(40.0, min(bpm, 250.0))
         return round(bpm, 1)
 
