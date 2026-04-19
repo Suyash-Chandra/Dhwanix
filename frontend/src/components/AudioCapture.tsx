@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { captureAudio } from "@/lib/api";
 import { useAudioStore } from "@/lib/store";
+import { mutate } from "swr";
 import WaveformVisualizer from "./WaveformVisualizer";
 
 interface AudioCaptureProps {
@@ -93,6 +94,10 @@ export default function AudioCapture({ onCaptureComplete }: AudioCaptureProps) {
     try {
       const result = await captureAudio(blobToSave, modalTitle, modalMood);
       setCaptureStatus("Capture saved successfully.");
+      
+      // Globally wipe the SWR cache so the Dashboard/Ideas pages update instantly
+      mutate(key => typeof key === 'string' && key.startsWith('/api/'), undefined, { revalidate: true });
+      
       if (onCaptureComplete) onCaptureComplete(result);
       setTimeout(() => setCaptureStatus(""), 3000);
     } catch (captureError) {
