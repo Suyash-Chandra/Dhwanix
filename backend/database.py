@@ -15,7 +15,7 @@ if "postgresql" in DATABASE_URL:
     kwargs["connect_args"] = {
         "ssl": "require",
         "statement_cache_size": 0,
-        "timeout": 15
+        "timeout": 5
     }
 
 engine = create_async_engine(DATABASE_URL, **kwargs)
