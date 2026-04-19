@@ -22,6 +22,8 @@ if "://" in raw_db_url:
 
 DATABASE_URL = raw_db_url
 
+from sqlalchemy.pool import NullPool
+
 kwargs = {"echo": False}
 if "postgresql" in DATABASE_URL:
     kwargs["connect_args"] = {
@@ -29,6 +31,9 @@ if "postgresql" in DATABASE_URL:
         "statement_cache_size": 0,
         "timeout": 5
     }
+    kwargs["poolclass"] = NullPool
+    # SQLAlchemy dialect-level prepared statement cache must also be disabled
+    kwargs["prepared_statement_cache_size"] = 0
 
 engine = create_async_engine(DATABASE_URL, **kwargs)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
