@@ -24,7 +24,7 @@ function EvolutionContent() {
   const searchParams = useSearchParams();
   const ideaIdParam = searchParams.get("idea");
 
-  const [ideas, setIdeas] = useState<Idea[]>([]);
+
   const [selectedIdeaId, setSelectedIdeaId] = useState<number | null>(
     ideaIdParam ? Number(ideaIdParam) : null,
   );
