@@ -233,16 +233,17 @@ async def get_stats(x_device_id: str | None = Header(None), db: AsyncSession = D
 @router.get("/activity")
 async def get_activity(days: int = 180, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Return daily capture activity for dashboard heatmap."""
+    from sqlalchemy import cast, Date
     bounded_days = max(30, min(days, 366))
 
     query = select(
-        func.date(IdeaVersion.created_at).label("day"),
+        cast(IdeaVersion.created_at, Date).label("day"),
         func.count(IdeaVersion.id).label("count"),
     ).outerjoin(Idea)
     if x_device_id:
         query = query.where(Idea.device_id == x_device_id)
         
-    query = query.group_by(func.date(IdeaVersion.created_at)).order_by(func.date(IdeaVersion.created_at).asc())
+    query = query.group_by(cast(IdeaVersion.created_at, Date)).order_by(cast(IdeaVersion.created_at, Date).asc())
 
     result = await db.execute(query)
 

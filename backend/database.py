@@ -10,7 +10,11 @@ elif raw_db_url.startswith("postgresql://"):
 
 DATABASE_URL = raw_db_url
 
-engine = create_async_engine(DATABASE_URL, echo=False)
+kwargs = {"echo": False}
+if "postgresql" in DATABASE_URL:
+    kwargs["connect_args"] = {"ssl": "require"}
+
+engine = create_async_engine(DATABASE_URL, **kwargs)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 class Base(DeclarativeBase):
