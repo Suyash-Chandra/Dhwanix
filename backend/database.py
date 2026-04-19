@@ -2,7 +2,13 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
-DATABASE_URL = "sqlite+aiosqlite:///./music_ideas.db"
+raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./music_ideas.db")
+if raw_db_url.startswith("postgres://"):
+    raw_db_url = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif raw_db_url.startswith("postgresql://"):
+    raw_db_url = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+DATABASE_URL = raw_db_url
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

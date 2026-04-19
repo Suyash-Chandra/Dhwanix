@@ -1,10 +1,15 @@
+import { getDeviceId } from "./deviceId";
+
 // Vercel proxy rewrite handles the routing now to avoid CORS/Mixed Content.
 const API_BASE = "";
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const deviceId = getDeviceId();
+  
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
+      "X-Device-Id": deviceId,
       ...options?.headers,
     },
   });

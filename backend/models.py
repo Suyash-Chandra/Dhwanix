@@ -8,6 +8,7 @@ class Idea(Base):
     __tablename__ = "ideas"
 
     id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(100), index=True, nullable=True)
     title = Column(String(255), default="Untitled Idea")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)

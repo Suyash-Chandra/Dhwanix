@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from database import get_db
@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api", tags=["search"])
 
 
 @router.post("/search")
-async def search_ideas(query: dict, db: AsyncSession = Depends(get_db)):
+async def search_ideas(query: dict, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """
     Semantic search for musical ideas.
     Uses Ollama to convert query to tags, then matches against stored tags.
@@ -22,11 +22,12 @@ async def search_ideas(query: dict, db: AsyncSession = Depends(get_db)):
     search_tags = await extract_search_tags(search_query)
 
     # Fetch all idea versions with their tags
-    result = await db.execute(
-        select(IdeaVersion, Idea.title)
-        .join(Idea, IdeaVersion.idea_id == Idea.id)
-        .order_by(IdeaVersion.created_at.desc())
-    )
+    db_query = select(IdeaVersion, Idea.title).join(Idea, IdeaVersion.idea_id == Idea.id)
+    if x_device_id:
+        db_query = db_query.where(Idea.device_id == x_device_id)
+        
+    db_query = db_query.order_by(IdeaVersion.created_at.desc())
+    result = await db.execute(db_query)
     rows = result.all()
 
     # Score each version based on tag matching

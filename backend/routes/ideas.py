@@ -1,6 +1,6 @@
 import os
 import mimetypes
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -15,19 +15,23 @@ router = APIRouter(prefix="/api", tags=["ideas"])
 async def list_ideas(
     skip: int = 0,
     limit: int = 50,
+    x_device_id: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """List all ideas with their latest version metadata."""
+    query = select(Idea).options(selectinload(Idea.versions))
+    if x_device_id:
+        query = query.where(Idea.device_id == x_device_id)
+
     result = await db.execute(
-        select(Idea)
-        .options(selectinload(Idea.versions))
-        .order_by(Idea.updated_at.desc())
-        .offset(skip)
-        .limit(limit)
+        query.order_by(Idea.updated_at.desc()).offset(skip).limit(limit)
     )
     ideas = result.scalars().all()
 
-    count_result = await db.execute(select(func.count(Idea.id)))
+    count_query = select(func.count(Idea.id))
+    if x_device_id:
+        count_query = count_query.where(Idea.device_id == x_device_id)
+    count_result = await db.execute(count_query)
     total = count_result.scalar()
 
     items = []
@@ -57,13 +61,13 @@ async def list_ideas(
 
 
 @router.get("/ideas/{idea_id}")
-async def get_idea(idea_id: int, db: AsyncSession = Depends(get_db)):
+async def get_idea(idea_id: int, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Get idea detail with all versions."""
-    result = await db.execute(
-        select(Idea)
-        .options(selectinload(Idea.versions))
-        .where(Idea.id == idea_id)
-    )
+    query = select(Idea).options(selectinload(Idea.versions)).where(Idea.id == idea_id)
+    if x_device_id:
+        query = query.where(Idea.device_id == x_device_id)
+        
+    result = await db.execute(query)
     idea = result.scalar_one_or_none()
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
@@ -99,13 +103,13 @@ async def get_idea(idea_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/ideas/{idea_id}")
-async def delete_idea(idea_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_idea(idea_id: int, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Delete an idea and all its versions."""
-    result = await db.execute(
-        select(Idea)
-        .options(selectinload(Idea.versions))
-        .where(Idea.id == idea_id)
-    )
+    query = select(Idea).options(selectinload(Idea.versions)).where(Idea.id == idea_id)
+    if x_device_id:
+        query = query.where(Idea.device_id == x_device_id)
+        
+    result = await db.execute(query)
     idea = result.scalar_one_or_none()
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
@@ -122,13 +126,13 @@ async def delete_idea(idea_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/ideas/{idea_id}/graph")
-async def get_idea_graph(idea_id: int, db: AsyncSession = Depends(get_db)):
+async def get_idea_graph(idea_id: int, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Return nodes/edges for evolution graph visualization."""
-    result = await db.execute(
-        select(Idea)
-        .options(selectinload(Idea.versions))
-        .where(Idea.id == idea_id)
-    )
+    query = select(Idea).options(selectinload(Idea.versions)).where(Idea.id == idea_id)
+    if x_device_id:
+        query = query.where(Idea.device_id == x_device_id)
+        
+    result = await db.execute(query)
     idea = result.scalar_one_or_none()
     if not idea:
         raise HTTPException(status_code=404, detail="Idea not found")
@@ -170,6 +174,16 @@ async def get_idea_graph(idea_id: int, db: AsyncSession = Depends(get_db)):
 @router.get("/audio/{filename}")
 async def get_audio_file(filename: str):
     """Serve audio files."""
+    import os
+    from fastapi.responses import RedirectResponse
+    
+    supabase_url = os.getenv("SUPABASE_URL")
+    if supabase_url:
+        # If Supabase is configured, redirect to the public URL bucket
+        # e.g., https://<project>.supabase.co/storage/v1/object/public/audio_files/capture_123.wav
+        public_url = f"{supabase_url}/storage/v1/object/public/audio_files/{filename}"
+        return RedirectResponse(public_url)
+
     file_path = os.path.join(AUDIO_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
@@ -178,30 +192,34 @@ async def get_audio_file(filename: str):
 
 
 @router.get("/stats")
-async def get_stats(db: AsyncSession = Depends(get_db)):
+async def get_stats(x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Get dashboard statistics."""
-    idea_count = await db.execute(select(func.count(Idea.id)))
+    idea_query = select(func.count(Idea.id))
+    if x_device_id:
+        idea_query = idea_query.where(Idea.device_id == x_device_id)
+    idea_count = await db.execute(idea_query)
     total_ideas = idea_count.scalar()
 
-    version_count = await db.execute(select(func.count(IdeaVersion.id)))
+    version_query = select(func.count(IdeaVersion.id)).outerjoin(Idea)
+    if x_device_id:
+        version_query = version_query.where(Idea.device_id == x_device_id)
+    version_count = await db.execute(version_query)
     total_versions = version_count.scalar()
 
     # Get mood distribution
-    mood_result = await db.execute(
-        select(IdeaVersion.mood, func.count(IdeaVersion.id))
-        .group_by(IdeaVersion.mood)
-        .order_by(func.count(IdeaVersion.id).desc())
-        .limit(5)
-    )
+    mood_query = select(IdeaVersion.mood, func.count(IdeaVersion.id)).outerjoin(Idea)
+    if x_device_id:
+        mood_query = mood_query.where(Idea.device_id == x_device_id)
+    mood_query = mood_query.group_by(IdeaVersion.mood).order_by(func.count(IdeaVersion.id).desc()).limit(5)
+    mood_result = await db.execute(mood_query)
     moods = {row[0]: row[1] for row in mood_result.all() if row[0]}
 
     # Get genre distribution
-    genre_result = await db.execute(
-        select(IdeaVersion.genre, func.count(IdeaVersion.id))
-        .group_by(IdeaVersion.genre)
-        .order_by(func.count(IdeaVersion.id).desc())
-        .limit(5)
-    )
+    genre_query = select(IdeaVersion.genre, func.count(IdeaVersion.id)).outerjoin(Idea)
+    if x_device_id:
+        genre_query = genre_query.where(Idea.device_id == x_device_id)
+    genre_query = genre_query.group_by(IdeaVersion.genre).order_by(func.count(IdeaVersion.id).desc()).limit(5)
+    genre_result = await db.execute(genre_query)
     genres = {row[0]: row[1] for row in genre_result.all() if row[0]}
 
     return {
@@ -213,18 +231,20 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/activity")
-async def get_activity(days: int = 180, db: AsyncSession = Depends(get_db)):
+async def get_activity(days: int = 180, x_device_id: str | None = Header(None), db: AsyncSession = Depends(get_db)):
     """Return daily capture activity for dashboard heatmap."""
     bounded_days = max(30, min(days, 366))
 
-    result = await db.execute(
-        select(
-            func.date(IdeaVersion.created_at).label("day"),
-            func.count(IdeaVersion.id).label("count"),
-        )
-        .group_by(func.date(IdeaVersion.created_at))
-        .order_by(func.date(IdeaVersion.created_at).asc())
-    )
+    query = select(
+        func.date(IdeaVersion.created_at).label("day"),
+        func.count(IdeaVersion.id).label("count"),
+    ).outerjoin(Idea)
+    if x_device_id:
+        query = query.where(Idea.device_id == x_device_id)
+        
+    query = query.group_by(func.date(IdeaVersion.created_at)).order_by(func.date(IdeaVersion.created_at).asc())
+
+    result = await db.execute(query)
 
     return {
         "days": bounded_days,
