@@ -1,38 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { getActivity, getIdeas, getStats } from "@/lib/api";
 import type { ActivityResponse, Idea, IdeasListResponse, Stats } from "@/lib/types";
 import IdeaCard from "@/components/IdeaCard";
 import SearchBar from "@/components/SearchBar";
 
 export default function Dashboard() {
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [activity, setActivity] = useState<ActivityResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: ideasData, isLoading: ideasLoading } = useSWR<IdeasListResponse>(
+    "/api/ideas?limit=6",
+    () => getIdeas(0, 6) as Promise<IdeasListResponse>,
+    { refreshInterval: 5000 }
+  );
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [ideasData, statsData, activityData] = await Promise.all([
-          getIdeas(0, 6) as Promise<IdeasListResponse>,
-          getStats() as Promise<Stats>,
-          getActivity(30) as Promise<ActivityResponse>,
-        ]);
-        setIdeas(ideasData.items);
-        setStats(statsData);
-        setActivity(activityData);
-      } catch (err) {
-        console.error("Failed to fetch dashboard data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data: stats } = useSWR<Stats>(
+    "/api/stats",
+    () => getStats() as Promise<Stats>,
+    { refreshInterval: 10000 }
+  );
 
-    fetchData();
-  }, []);
+  const { data: activity } = useSWR<ActivityResponse>(
+    "/api/activity",
+    () => getActivity(30) as Promise<ActivityResponse>,
+    { refreshInterval: 15000 }
+  );
+
+  const ideas = ideasData?.items || [];
+  const loading = ideasLoading;
 
   const topMood =
     stats?.moods && Object.keys(stats.moods).length > 0

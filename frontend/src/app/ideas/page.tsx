@@ -1,35 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import SearchBar from "@/components/SearchBar";
 import ClusterView from "@/components/ClusterView";
 import { getIdeas } from "@/lib/api";
 import type { Idea, IdeasListResponse } from "@/lib/types";
 
 export default function IdeasPage() {
-  const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const limit = 100;
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const data = (await getIdeas(page * limit, limit)) as IdeasListResponse;
-        setIdeas(data.items);
-        setTotal(data.total);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { data, isLoading } = useSWR<IdeasListResponse>(
+    `/api/ideas?page=${page}&limit=${limit}`,
+    () => getIdeas(page * limit, limit) as Promise<IdeasListResponse>,
+    { refreshInterval: 10000, keepPreviousData: true }
+  );
 
-    fetchData();
-  }, [page]);
+  const ideas = data?.items || [];
+  const total = data?.total || 0;
+  const loading = isLoading && !data;
 
   const totalPages = Math.ceil(total / limit);
 

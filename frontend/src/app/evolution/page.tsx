@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import useSWR from "swr";
 import { useSearchParams } from "next/navigation";
 import { getIdeaGraph, getIdeas } from "@/lib/api";
 import type { GraphResponse, Idea, IdeasListResponse } from "@/lib/types";
@@ -30,22 +31,19 @@ function EvolutionContent() {
   const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchIdeas = async () => {
-      try {
-        const data = (await getIdeas(0, 100)) as IdeasListResponse;
-        setIdeas(data.items);
-        if (!selectedIdeaId && data.items.length > 0) {
-          setSelectedIdeaId(data.items[0].id);
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    };
+  const { data: ideasListResponse } = useSWR<IdeasListResponse>(
+    "/api/ideas?limit=100",
+    () => getIdeas(0, 100) as Promise<IdeasListResponse>,
+    { refreshInterval: 10000 }
+  );
 
-    fetchIdeas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const ideas = ideasListResponse?.items || [];
+
+  useEffect(() => {
+    if (!selectedIdeaId && ideas.length > 0) {
+      setSelectedIdeaId(ideas[0].id);
+    }
+  }, [ideas, selectedIdeaId]);
 
   useEffect(() => {
     if (!selectedIdeaId) return;
