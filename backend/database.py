@@ -1,12 +1,24 @@
 import os
+import urllib.parse
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
 raw_db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./music_ideas.db")
-if raw_db_url.startswith("postgres://"):
-    raw_db_url = raw_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
-elif raw_db_url.startswith("postgresql://"):
-    raw_db_url = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+# Parse and safely URL-encode the password if a remote DB is used.
+if "://" in raw_db_url:
+    scheme, rest = raw_db_url.split("://", 1)
+    if scheme in ["postgres", "postgresql", "postgresql+asyncpg"]:
+        if "@" in rest:
+            user_pass, host_part = rest.rsplit("@", 1)
+            if ":" in user_pass:
+                user, raw_pass = user_pass.split(":", 1)
+                encoded_pass = urllib.parse.quote_plus(raw_pass)
+                raw_db_url = f"postgresql+asyncpg://{user}:{encoded_pass}@{host_part}"
+            else:
+                raw_db_url = f"postgresql+asyncpg://{user_pass}@{host_part}"
+        else:
+            raw_db_url = f"postgresql+asyncpg://{rest}"
 
 DATABASE_URL = raw_db_url
 
