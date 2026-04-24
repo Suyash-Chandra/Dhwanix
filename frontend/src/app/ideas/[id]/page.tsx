@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { branchIdea, deleteIdea, getAudioUrl, getIdea } from "@/lib/api";
 import type { Idea, IdeaVersion } from "@/lib/types";
+import WaveformVisualizer from "@/components/WaveformVisualizer";
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return "0:00";
@@ -50,6 +51,12 @@ export default function IdeaDetailPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const branchRecorderRef = useRef<MediaRecorder | null>(null);
   const branchChunksRef = useRef<Blob[]>([]);
+
+  // Waveform state
+  const [liveWaveform, setLiveWaveform] = useState<Float32Array | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const fetchIdea = async () => {
@@ -114,8 +121,35 @@ export default function IdeaDetailPage() {
         }
       };
 
+      // Set up live waveform visualization
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      const updateWaveform = () => {
+        if (!analyserRef.current) return;
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteTimeDomainData(dataArray);
+        const floatArray = new Float32Array(dataArray.length);
+        for (let i = 0; i < dataArray.length; i++) {
+          floatArray[i] = (dataArray[i] - 128) / 128.0;
+        }
+        setLiveWaveform(floatArray);
+        animationFrameRef.current = requestAnimationFrame(updateWaveform);
+      };
+      updateWaveform();
+
       recorder.onstop = async () => {
         setIsBranchRecording(false);
+
+        // Cleanup waveform
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        if (audioContextRef.current) audioContextRef.current.close();
+        setLiveWaveform(null);
 
         const tracks = stream.getTracks();
         tracks.forEach((track) => track.stop());
@@ -322,10 +356,10 @@ export default function IdeaDetailPage() {
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold uppercase tracking-[0.12em] text-[var(--accent-deep)]">
+                    <p className="text-sm font-extrabold uppercase tracking-[0.12em] text-violet-500">
                       {index === 0 ? "Newest version" : (version.display_version || `Version ${version.id}`)}
                     </p>
-                    <p className="mt-2 text-xl font-[family-name:var(--font-display)]">
+                    <p className="mt-2 text-xl font-[family-name:var(--font-display)] text-[var(--text)]">
                       {version.parent_version_id
                         ? `Branched from ${idea.versions?.find((v) => v.id === version.parent_version_id)?.display_version || `v${version.parent_version_id}`}`
                         : "Original root version"}
@@ -389,8 +423,15 @@ export default function IdeaDetailPage() {
               )}
             </div>
 
+            {isBranchRecording && (
+              <div className="mt-6 w-full max-w-sm glass rounded-xl p-4 animate-fade-in">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-violet-400 mb-2">Live Input</p>
+                <WaveformVisualizer audioData={liveWaveform} isLive={true} color="#8b5cf6" height={48} />
+              </div>
+            )}
+
             {branchStatus ? (
-              <p className="mt-3 text-sm font-semibold text-[var(--accent-deep)]">
+              <p className="mt-4 text-sm font-semibold text-violet-500">
                 {branchStatus}
               </p>
             ) : null}

@@ -1,18 +1,36 @@
 const rawApiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const API_BASE = rawApiBase.replace(/\/+$/, "");
 
-async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
-    const error = await res.text();
-    throw new Error(`API Error ${res.status}: ${error}`);
+async function fetchApi<T>(path: string, options?: RequestInit, retries = 3): Promise<T> {
+  const url = `${API_BASE}${path}`;
+  try {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        ...options?.headers,
+      },
+    });
+
+    if (!res.ok) {
+      // If Render load balancer throws a timeout/gateway error because the container is waking up, retry.
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retries > 0) {
+        console.warn(`Render sleeping. Retrying ${url} in 5 seconds... (${retries} left)`);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        return fetchApi(path, options, retries - 1);
+      }
+      const error = await res.text();
+      throw new Error(`API Error ${res.status}: ${error}`);
+    }
+    return res.json();
+  } catch (error: any) {
+    // If it's a network failure (fetch failed completely), retry.
+    if (error.name === "TypeError" && retries > 0) {
+      console.warn(`Network error. Retrying ${url} in 5 seconds... (${retries} left)`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      return fetchApi(path, options, retries - 1);
+    }
+    throw error;
   }
-  return res.json();
 }
 
 // ---- Capture ----
