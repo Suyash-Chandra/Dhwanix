@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAudioStore } from "@/lib/store";
@@ -14,6 +15,23 @@ const navLinks = [
 export default function Navbar() {
   const pathname = usePathname();
   const isListening = useAudioStore((s) => s.isListening);
+
+  // Background keep-alive script to prevent Render sleep mode
+  useEffect(() => {
+    const pingServer = async () => {
+      try {
+        const apiUrl = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+        await fetch(`${apiUrl}/health`);
+      } catch (err) {
+        // Silent catch
+      }
+    };
+
+    // Ping on load, then every 5 minutes
+    pingServer();
+    const interval = setInterval(pingServer, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 px-4 pt-4 sm:px-6">
